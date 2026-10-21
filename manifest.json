@@ -1,0 +1,41 @@
+{
+  "manifest_version": 3,
+  "name": "Page Image Picker",
+  "version": "1.0.0",
+  "description": "Scan the current webpage for images, pick which ones you want, and download them in the order they appear on the page. Made by Justin Pimentel.",
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "sidePanel",
+    "downloads",
+    "storage",
+    "offscreen"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "action": {
+    "default_title": "Open Page Image Picker"
+  },
+  "side_panel": {
+    "default_path": "sidepanel.html"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content-hover.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://www.facebook.com/*", "https://www.messenger.com/*"],
+      "js": ["shared.js", "content-messenger-menu.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "icons": {
+    "128": "icon128.png"
+  }
+}

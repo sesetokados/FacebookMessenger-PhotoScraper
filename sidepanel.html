@@ -1,0 +1,833 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Page Image Picker</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #ffffff;
+    --fg: #1a1a1a;
+    --muted: #6b6b6b;
+    --border: #e2e2e2;
+    --accent: #2563eb;
+    --accent-fg: #ffffff;
+    --hover: #f5f7fb;
+    --hover-highlight: #1e3a8a;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    height: 100%;
+    margin: 0;
+  }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--fg);
+    font-size: 13px;
+    overflow: hidden; /* the regions below scroll independently instead */
+  }
+
+  /* ---- App shell: fixed header, flexible photo area, collapsible footer ---- */
+  #appShell {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+  }
+
+  #stickyHeader {
+    flex: 0 0 auto;
+    background: var(--bg);
+    border-bottom: 1px solid var(--border);
+  }
+  #toolbar {
+    display: flex;
+    gap: 6px;
+    padding: 8px 10px;
+    flex-wrap: wrap;
+    align-items: center;
+    position: relative;
+  }
+  button {
+    font: inherit;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    color: var(--fg);
+    padding: 6px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+  }
+  button:hover { background: var(--hover); }
+  button.primary {
+    background: var(--accent);
+    color: var(--accent-fg);
+    border-color: var(--accent);
+  }
+  button.primary:hover { filter: brightness(1.05); }
+  button.success {
+    background: #16a34a;
+    color: #fff;
+    border-color: #16a34a;
+  }
+  button.success:hover { filter: brightness(1.05); }
+  button.warning {
+    background: #eab308;
+    color: #1a1a1a;
+    border-color: #eab308;
+  }
+  button.warning:hover { filter: brightness(1.05); }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  #autoScanBar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 10px;
+    border-top: 1px solid var(--border);
+    flex-wrap: wrap;
+    background: var(--hover);
+  }
+  #autoScanBar label {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    color: var(--muted);
+  }
+  #autoScanBar input[type="number"] {
+    width: 56px;
+    padding: 4px 6px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    font: inherit;
+    background: var(--bg);
+    color: var(--fg);
+  }
+  #autoScanBar input[type="date"] {
+    padding: 3px 4px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    font: inherit;
+    background: var(--bg);
+    color: var(--fg);
+  }
+  #scanTracker {
+    width: 100%;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--fg);
+  }
+  #scanTracker:empty {
+    display: none;
+  }
+  #autoScanBtn.stopping {
+    background: #dc2626;
+    border-color: #dc2626;
+    color: #fff;
+  }
+
+  #namingBar {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0 10px 8px;
+    flex-wrap: wrap;
+  }
+  #namingBar label {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    color: var(--muted);
+    font-size: 12px;
+  }
+  #namingBar input[type="text"] {
+    width: 110px;
+    padding: 4px 6px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    font: inherit;
+    background: var(--bg);
+    color: var(--fg);
+  }
+  #namingBar input[type="date"] {
+    padding: 3px 4px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    font: inherit;
+    background: var(--bg);
+    color: var(--fg);
+    color-scheme: light;
+  }
+  #namingBar input[type="date"]::-webkit-calendar-picker-indicator {
+    cursor: pointer;
+    opacity: 0.8;
+    filter: invert(0.3);
+  }
+  @media (prefers-color-scheme: dark) {
+    #namingBar input[type="date"] {
+      color-scheme: dark;
+    }
+    #namingBar input[type="date"]::-webkit-calendar-picker-indicator {
+      filter: invert(0.9);
+    }
+  }
+  #namingPreview {
+    color: var(--muted);
+    font-size: 11px;
+    font-style: italic;
+    width: 100%;
+  }
+
+  #downloadProgress {
+    padding: 0 10px 8px;
+  }
+  #downloadProgressBar {
+    height: 8px;
+    border-radius: 4px;
+    background: var(--hover);
+    border: 1px solid var(--border);
+    overflow: hidden;
+  }
+  #downloadProgressFill {
+    height: 100%;
+    width: 0%;
+    background: #16a34a;
+    transition: width 0.2s ease;
+  }
+  #downloadProgressText {
+    font-size: 11px;
+    color: var(--muted);
+    padding-top: 3px;
+  }
+
+  #settingsBtn {
+    margin-left: auto;
+  }
+  #settingsPanel {
+    display: none;
+    position: absolute;
+    top: 100%;
+    right: 10px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.15);
+    z-index: 20;
+    min-width: 260px;
+  }
+  #settingsPanel.open {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  #settingsPanel label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--fg);
+  }
+  #settingsPanel input[type="color"] {
+    width: 32px;
+    height: 24px;
+    padding: 0;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: none;
+    cursor: pointer;
+  }
+  #settingsPanel input[type="number"] {
+    width: 64px;
+    padding: 4px 6px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    font: inherit;
+    background: var(--bg);
+    color: var(--fg);
+  }
+  #settingsPanel .settings-divider {
+    border: none;
+    border-top: 1px solid var(--border);
+    width: 100%;
+    margin: 2px 0;
+  }
+  #settingsPanel .settings-row {
+    display: flex;
+    gap: 8px;
+  }
+  #settingsPanel button {
+    font-size: 12px;
+    padding: 4px 8px;
+  }
+
+  /* ---- Photo area: takes all remaining space, scrolls on its own ---- */
+  #photoSection {
+    flex: 1 1 auto;
+    min-height: 0; /* required for a flex child to actually scroll instead of overflowing */
+    overflow-y: auto;
+  }
+
+  /* ---- Photos header: click to hide the photos so Folder Settings moves up ---- */
+  #photosToggle {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    width: 100%;
+    border: none;
+    border-bottom: 1px solid var(--border);
+    border-radius: 0;
+    padding: 6px 10px;
+    font-size: 12px;
+    font-weight: 600;
+    text-align: left;
+  }
+  #photosToggleArrow {
+    color: var(--muted);
+    font-size: 10px;
+    width: 10px;
+  }
+  #photosToggleCount {
+    color: var(--muted);
+    font-weight: normal;
+    margin-left: auto;
+    font-size: 11px;
+  }
+  /* Photos hidden: Folder Settings takes the freed-up space. */
+  #appShell.photos-collapsed #photoSection {
+    display: none;
+  }
+  #appShell.photos-collapsed #folderSettings {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+  }
+  #appShell.photos-collapsed #folderSettingsBody {
+    max-height: none;
+  }
+  #appShell.photos-collapsed #destFolderTree {
+    max-height: none;
+  }
+  #status {
+    padding: 6px 10px 0;
+    color: var(--muted);
+  }
+  #count {
+    padding: 2px 10px 6px;
+    color: var(--muted);
+  }
+  .meta .source-tag {
+    display: inline-block;
+    font-size: 10px;
+    color: var(--muted);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 0 4px;
+    margin-left: 4px;
+  }
+  #list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(108px, 1fr));
+    gap: 8px;
+    padding: 8px 10px 14px;
+  }
+  /* Grouped by sender: one header + grid per person instead of one big grid. */
+  #list.grouped {
+    display: block;
+  }
+  .sender-group {
+    margin-bottom: 10px;
+  }
+  .sender-header {
+    position: sticky;
+    top: 0;
+    z-index: 3;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 5px 2px;
+    background: var(--bg);
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 6px;
+    font-weight: 600;
+  }
+  .sender-header button {
+    font-size: 11px;
+    font-weight: normal;
+    padding: 3px 7px;
+  }
+  .sender-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(108px, 1fr));
+    gap: 8px;
+  }
+  .tile {
+    position: relative;
+    aspect-ratio: 1 / 1;
+    border-radius: 8px;
+    overflow: hidden;
+    border: 2px solid transparent;
+    cursor: pointer;
+    background: repeating-conic-gradient(#eee 0% 25%, #fafafa 0% 50%) 50% / 10px 10px;
+  }
+  .tile.selected {
+    border-color: var(--accent);
+  }
+  .tile.hover-highlighted {
+    border-color: var(--hover-highlight);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--hover-highlight) 35%, transparent);
+    transform: scale(1.5);
+    transform-origin: center;
+    position: relative;
+    z-index: 10;
+    transition: transform 0.12s ease, box-shadow 0.12s ease;
+  }
+  .tile .thumb {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+  .tile input[type="checkbox"] {
+    position: absolute;
+    top: 5px;
+    left: 5px;
+    width: 17px;
+    height: 17px;
+    margin: 0;
+    z-index: 2;
+  }
+  .tile .order {
+    position: absolute;
+    top: 4px;
+    right: 5px;
+    font-size: 10px;
+    color: #fff;
+    background: rgba(0, 0, 0, 0.55);
+    border-radius: 3px;
+    padding: 1px 5px;
+    font-variant-numeric: tabular-nums;
+    z-index: 2;
+  }
+  .tile .dim {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    font-size: 10px;
+    color: #fff;
+    background: linear-gradient(transparent, rgba(0, 0, 0, 0.6));
+    padding: 10px 5px 3px;
+    text-align: center;
+  }
+  .tile .source-tag {
+    display: none;
+  }
+  #empty {
+    padding: 20px 10px;
+    color: var(--muted);
+    text-align: center;
+  }
+
+  /* ---- Folder settings: collapsed by default, own scroll region when open ---- */
+  #folderSettings {
+    flex: 0 0 auto;
+    border-top: 1px solid var(--border);
+    background: var(--bg);
+  }
+  #folderSettings summary {
+    list-style: none;
+    cursor: pointer;
+    padding: 8px 10px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--fg);
+    font-size: 12px;
+    user-select: none;
+  }
+  #folderSettings summary::-webkit-details-marker {
+    display: none;
+  }
+  #folderSettings summary::before {
+    content: "▸";
+    color: var(--muted);
+    font-size: 10px;
+    width: 10px;
+  }
+  #folderSettings[open] summary::before {
+    content: "▾";
+  }
+  #folderSettingsSummaryStatus {
+    color: var(--muted);
+    font-weight: normal;
+    margin-left: auto;
+    font-size: 11px;
+    text-align: right;
+  }
+  #folderSettingsBody {
+    padding: 0 10px 10px;
+    max-height: 45vh;
+    overflow-y: auto;
+    border-top: 1px solid var(--border);
+    padding-top: 8px;
+  }
+  #destFolderRow {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  #mainFolderName {
+    color: var(--muted);
+    font-size: 12px;
+    word-break: break-all;
+  }
+  #folderScanStatus {
+    color: var(--muted);
+    font-size: 11px;
+    padding-top: 4px;
+    min-height: 14px;
+  }
+  #scanProgress {
+    margin-top: 6px;
+  }
+  #scanProgressBar {
+    height: 6px;
+    border-radius: 3px;
+    background: var(--hover);
+    overflow: hidden;
+  }
+  #scanProgressFill {
+    height: 100%;
+    width: 40%;
+    background: var(--accent);
+    border-radius: 3px;
+    animation: scan-indeterminate 1.1s ease-in-out infinite;
+  }
+  @keyframes scan-indeterminate {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(350%); }
+  }
+  #scanProgressText {
+    font-size: 11px;
+    color: var(--muted);
+    padding-top: 3px;
+  }
+  #destFolderTreeWrap {
+    margin-top: 6px;
+  }
+  #folderSearchInput {
+    width: 100%;
+    padding: 5px 8px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font: inherit;
+    background: var(--bg);
+    color: var(--fg);
+    margin-bottom: 6px;
+  }
+  #selectedDestRow {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 5px 8px;
+    background: var(--hover);
+    border-radius: 6px;
+    margin-bottom: 6px;
+  }
+  #selectedDestLabel {
+    font-size: 11px;
+    color: var(--fg);
+    word-break: break-word;
+  }
+  #selectFolderNoneBtn {
+    font-size: 11px;
+    padding: 3px 7px;
+    flex-shrink: 0;
+  }
+  #newFolderRow {
+    margin-bottom: 6px;
+  }
+  #newFolderBtn {
+    font-size: 11px;
+    padding: 3px 8px;
+  }
+  #newFolderForm {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 6px 8px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+  }
+  #newFolderParentLabel {
+    font-size: 11px;
+    color: var(--muted);
+    word-break: break-word;
+  }
+  .new-folder-inputs {
+    display: flex;
+    gap: 4px;
+  }
+  #newFolderName {
+    flex: 1 1 auto;
+    min-width: 0;
+    padding: 4px 6px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    font: inherit;
+    background: var(--bg);
+    color: var(--fg);
+  }
+  .new-folder-inputs button {
+    font-size: 11px;
+    padding: 3px 8px;
+  }
+  #newFolderStatus {
+    font-size: 11px;
+    color: var(--muted);
+    padding-top: 3px;
+  }
+  #newFolderStatus:empty {
+    display: none;
+  }
+  #destFolderTree {
+    max-height: 220px;
+    overflow-y: auto;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 4px 6px;
+  }
+  .tree-row {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 0;
+    cursor: pointer;
+    border-radius: 4px;
+  }
+  .tree-row:hover {
+    background: var(--hover);
+  }
+  .tree-row.selected {
+    background: color-mix(in srgb, var(--accent) 16%, transparent);
+    font-weight: 600;
+  }
+  .tree-toggle {
+    width: 14px;
+    flex-shrink: 0;
+    text-align: center;
+    color: var(--muted);
+    font-size: 10px;
+    border: none;
+    background: none;
+    padding: 0;
+    cursor: pointer;
+  }
+  .tree-name {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .tree-name mark {
+    background: #fde68a;
+    color: inherit;
+    border-radius: 2px;
+  }
+  .tree-children {
+    margin-left: 16px;
+    border-left: 1px dashed var(--border);
+    padding-left: 6px;
+  }
+
+  /* ---- Completion modal (overlay, never eats layout space) ---- */
+  #completionOverlay, #confirmOverlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.45);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 50;
+    padding: 20px;
+  }
+  #completionModal, #confirmModal {
+    background: var(--bg);
+    color: var(--fg);
+    border-radius: 10px;
+    padding: 16px;
+    max-width: 320px;
+    width: 100%;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+  }
+  #completionTitle, #confirmTitle {
+    font-size: 14px;
+    font-weight: 700;
+    margin-bottom: 8px;
+  }
+  #completionTitle.error, #confirmTitle {
+    color: #b45309;
+  }
+  #completionTitle.success {
+    color: #16a34a;
+  }
+  #completionBody, #confirmBody {
+    font-size: 12px;
+    line-height: 1.6;
+    color: var(--fg);
+    white-space: pre-line;
+  }
+  #completionErrorsList {
+    margin-top: 8px;
+    max-height: 120px;
+    overflow-y: auto;
+    font-size: 11px;
+    color: var(--muted);
+    border-top: 1px solid var(--border);
+    padding-top: 6px;
+  }
+  #completionActions, #confirmActions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 12px;
+  }
+  #completionActions button, #confirmActions button {
+    font-size: 12px;
+  }
+
+  #credit {
+    flex: 0 0 auto;
+    text-align: center;
+    color: var(--muted);
+    font-size: 10px;
+    padding: 6px 0;
+    opacity: 0.6;
+  }
+</style>
+</head>
+<body>
+  <div id="appShell">
+    <div id="stickyHeader">
+      <div id="toolbar">
+        <button id="rescanBtn" class="primary">Rescan page</button>
+        <button id="selectAllBtn">Select all</button>
+        <button id="selectNoneBtn">Select none</button>
+        <button id="downloadBtn" class="success">Download selected</button>
+        <button id="resetBtn" class="warning">Reset</button>
+        <button id="settingsBtn" title="Settings">⚙</button>
+        <div id="settingsPanel">
+          <div class="settings-row">
+            <label>Min width <input type="number" id="minWidth" min="0" placeholder="0" /></label>
+            <label>Min height <input type="number" id="minHeight" min="0" placeholder="0" /></label>
+          </div>
+          <div class="settings-row">
+            <button id="applyFilterBtn">Apply filter</button>
+            <button id="clearFilterBtn">Clear</button>
+          </div>
+          <hr class="settings-divider" />
+          <label>Hover highlight color <input type="color" id="hoverColorPicker" /></label>
+          <label><input type="checkbox" id="accumulate" /> Accumulate (keep old, add new)</label>
+          <label><input type="checkbox" id="showAutoScan" /> Show "Scan chat" (auto-scroll) feature</label>
+          <label><input type="checkbox" id="messengerFullQuality" /> Messenger: save full quality (opens each photo, slower)</label>
+          <label><input type="checkbox" id="messengerBackgroundTab" /> Messenger full quality: work in a background tab (slowest)</label>
+          <label><input type="checkbox" id="groupBySender" /> Messenger: group preview by sender</label>
+        </div>
+      </div>
+      <div id="namingBar">
+        <label>Save as <input type="text" id="filenamePrefix" placeholder="Pick or type…" autocomplete="off" /></label>
+        <label>Date <input type="date" id="filenameDate" /></label>
+        <span id="namingPreview"></span>
+      </div>
+      <div id="downloadProgress" style="display:none;">
+        <div id="downloadProgressBar"><div id="downloadProgressFill"></div></div>
+        <div id="downloadProgressText"></div>
+      </div>
+      <div id="autoScanBar" style="display:none;">
+        <label>Scroll (px) <input type="number" id="scrollAmount" min="50" value="600" /></label>
+        <label>Every (sec) <input type="number" id="scanInterval" min="0.2" step="0.1" value="2" /></label>
+        <label title="Stop when the scan scrolls past this day; older photos aren't collected">Stop at date <input type="date" id="scanStopDate" /></label>
+        <button id="autoScanBtn" class="primary">Scan chat</button>
+        <div id="scanTracker"></div>
+      </div>
+    </div>
+
+    <button id="photosToggle" type="button" aria-expanded="true" title="Show / hide the photos">
+      <span id="photosToggleArrow">▾</span> Photos <span id="photosToggleCount"></span>
+    </button>
+    <main id="photoSection">
+      <div id="count"></div>
+      <div id="status"></div>
+      <div id="list"></div>
+      <div id="empty" style="display:none;">No images found yet. Click "Rescan page" to scan the current tab.</div>
+    </main>
+
+    <details id="folderSettings">
+      <summary>
+        📁 Folder Settings
+        <span id="folderSettingsSummaryStatus">Photos save to Downloads</span>
+      </summary>
+      <div id="folderSettingsBody">
+        <div id="destFolderRow">
+          <button id="chooseMainFolderBtn">Choose main folder…</button>
+          <span id="mainFolderName">No folder selected — photos save to Downloads</span>
+          <button id="rescanFoldersBtn" style="display:none;">Rescan folders</button>
+        </div>
+        <div id="scanProgress" style="display:none;">
+          <div id="scanProgressBar"><div id="scanProgressFill"></div></div>
+          <div id="scanProgressText"></div>
+        </div>
+        <div id="folderScanStatus"></div>
+        <div id="destFolderTreeWrap" style="display:none;">
+          <input type="text" id="folderSearchInput" placeholder="🔍 Search folders…" />
+          <div id="selectedDestRow">
+            <span id="selectedDestLabel">Saving to: Downloads (default)</span>
+            <button id="selectFolderNoneBtn">Use Downloads</button>
+          </div>
+          <div id="newFolderRow">
+            <button id="newFolderBtn" type="button">+ New folder</button>
+            <form id="newFolderForm" style="display:none;">
+              <div id="newFolderParentLabel"></div>
+              <div class="new-folder-inputs">
+                <input type="text" id="newFolderName" placeholder="Folder name" autocomplete="off" />
+                <button type="submit" class="primary">Create</button>
+                <button type="button" id="newFolderCancelBtn">Cancel</button>
+              </div>
+            </form>
+            <div id="newFolderStatus"></div>
+          </div>
+          <div id="destFolderTree"></div>
+        </div>
+      </div>
+    </details>
+
+    <div id="credit">made by Justin Pimentel</div>
+  </div>
+
+  <div id="completionOverlay" style="display:none;">
+    <div id="completionModal">
+      <div id="completionTitle"></div>
+      <div id="completionBody"></div>
+      <div id="completionErrorsList" style="display:none;"></div>
+      <div id="completionActions">
+        <button id="viewErrorsBtn" style="display:none;">View Errors</button>
+        <button id="completionOkBtn" class="primary">OK</button>
+      </div>
+    </div>
+  </div>
+  <div id="confirmOverlay" style="display:none;">
+    <div id="confirmModal">
+      <div id="confirmTitle">⚠ Missing file name info</div>
+      <div id="confirmBody"></div>
+      <div id="confirmActions">
+        <button id="confirmCancelBtn">Cancel</button>
+        <button id="confirmProceedBtn" class="primary">Download anyway</button>
+      </div>
+    </div>
+  </div>
+  <script src="shared.js"></script>
+  <script src="sidepanel.js"></script>
+</body>
+</html>
